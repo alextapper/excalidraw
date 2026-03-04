@@ -121,6 +121,57 @@ describe("general paste behavior", () => {
   });
 });
 
+describe("tabular import", () => {
+  it("pastes tabular text as an editable table", async () => {
+    pasteWithCtrlCmdV("Name\tRole\nAlice\tEngineer\nBob\tDesigner");
+
+    await waitFor(() => {
+      const rectangles = h.elements.filter((element) => element.type === "rectangle");
+      const texts = h.elements.filter((element) => element.type === "text");
+      expect(rectangles.length).toBe(6);
+      expect(texts.length).toBe(6);
+
+      const firstCell = rectangles[0];
+      const firstTextBinding = firstCell.boundElements?.find(
+        (binding) => binding.type === "text",
+      );
+      expect(firstTextBinding).toBeTruthy();
+
+      const boundText = h.elements.find(
+        (element) => element.id === firstTextBinding?.id,
+      );
+      expect(boundText).toEqual(
+        expect.objectContaining({
+          type: "text",
+          containerId: firstCell.id,
+        }),
+      );
+    });
+  });
+
+  it("imports dropped csv file as a table", async () => {
+    const file = new File(["Name,Role\nAlice,Engineer\nBob,Designer"], "team.csv", {
+      type: "text/csv",
+    });
+
+    await API.drop([{ kind: "file", file }]);
+
+    await waitFor(() => {
+      const rectangles = h.elements.filter((element) => element.type === "rectangle");
+      const texts = h.elements.filter((element) => element.type === "text");
+      expect(rectangles.length).toBe(6);
+      expect(texts.length).toBe(6);
+      expect(
+        texts.some(
+          (element) =>
+            element.type === "text" &&
+            (element.text === "Engineer" || element.text === "Designer"),
+        ),
+      ).toBe(true);
+    });
+  });
+});
+
 describe("paste text as single lines", () => {
   it("should create an element for each line when copying with Ctrl/Cmd+V", async () => {
     const text = "sajgfakfn\naaksfnknas\nakefnkasf";

@@ -1,4 +1,4 @@
-import { tryParseSpreadsheet } from "../charts";
+import { tryParseSpreadsheet, tryParseTabularData } from "../charts";
 
 describe("tryParseSpreadsheet", () => {
   it("works for numbers with comma in them", () => {
@@ -160,5 +160,33 @@ B\t20`,
         series: [{ title: "Value", values: [10, 20] }],
       },
     });
+  });
+});
+
+describe("tryParseTabularData", () => {
+  it("parses csv with quoted values", () => {
+    const result = tryParseTabularData(
+      `name,notes,score
+"Doe, Jane","Loves ""tables""",8
+John,"Adds
+multiline notes",10`,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        delimiter: ",",
+        rows: [
+          ["name", "notes", "score"],
+          ["Doe, Jane", 'Loves "tables"', "8"],
+          ["John", "Adds\nmultiline notes", "10"],
+        ],
+      },
+    });
+  });
+
+  it("rejects a non-tabular single line", () => {
+    const result = tryParseTabularData("hello, world");
+    expect(result.ok).toBe(false);
   });
 });

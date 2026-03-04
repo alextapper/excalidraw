@@ -7,6 +7,10 @@ import {
   tryParseNumber,
   tryParseSpreadsheet,
 } from "./charts.parse";
+import {
+  renderTabularDataAsTable,
+  tryParseTabularData,
+} from "./charts.table";
 import { renderRadarChart } from "./charts.radar";
 
 import type { ChartElements, Spreadsheet } from "./charts.types";
@@ -20,6 +24,13 @@ export {
 
 export { isSpreadsheetValidForChartType } from "./charts.helpers";
 export { tryParseCells, tryParseNumber, tryParseSpreadsheet };
+export {
+  type ParseTabularDataResult,
+  type ParsedTabularData,
+  type TableRenderStyle,
+  renderTabularDataAsTable,
+  tryParseTabularData,
+} from "./charts.table";
 
 export const renderSpreadsheet = (
   chartType: ChartType,

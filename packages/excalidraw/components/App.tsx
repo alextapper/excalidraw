@@ -369,6 +369,7 @@ import {
 } from "../scene";
 import { getStateForZoom } from "../scene/zoom";
 import {
+  blobToArrayBuffer,
   dataURLToString,
   generateIdFromFile,
   getDataURL,
@@ -426,7 +427,11 @@ import { EraserTrail } from "../eraser";
 
 import { getShortcutKey } from "../shortcut";
 
-import { tryParseSpreadsheet } from "../charts";
+import {
+  renderTabularDataAsTable,
+  tryParseSpreadsheet,
+  tryParseTabularData,
+} from "../charts";
 
 import ConvertElementTypePopup, {
   getConversionTypeFromElements,
@@ -579,6 +584,13 @@ const YOUTUBE_VIDEO_STATES = new Map<
   ExcalidrawElement["id"],
   ValueOf<typeof YOUTUBE_STATES>
 >();
+const TABULAR_FILE_EXTENSIONS = new Set(["csv", "tsv"]);
+const TABULAR_FILE_MIME_TYPES = new Set([
+  "text/csv",
+  "application/csv",
+  "text/tab-separated-values",
+  "application/vnd.ms-excel",
+]);
 
 let IS_PLAIN_PASTE = false;
 let IS_PLAIN_PASTE_TIMER = 0;
@@ -3516,6 +3528,75 @@ class App extends React.Component<AppProps, AppState> {
     }
   };
 
+  private isTabularDataFile = (file: File) => {
+    const extension = file.name?.split(".").pop()?.toLowerCase();
+    const mimeType = (file.type || "").toLowerCase();
+
+    return (
+      (extension ? TABULAR_FILE_EXTENSIONS.has(extension) : false) ||
+      TABULAR_FILE_MIME_TYPES.has(mimeType)
+    );
+  };
+
+  private readFileAsText = async (file: File) => {
+    if (typeof file.text === "function") {
+      return file.text();
+    }
+
+    const arrayBuffer = await blobToArrayBuffer(file);
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder().decode(arrayBuffer);
+    }
+
+    return String.fromCharCode(...new Uint8Array(arrayBuffer));
+  };
+
+  private insertTableFromRows = (
+    rows: string[][],
+    position: "cursor" | { clientX: number; clientY: number },
+  ) => {
+    const tableElements = renderTabularDataAsTable({
+      rows,
+      style: {
+        strokeColor: this.state.currentItemStrokeColor,
+        textColor: this.state.currentItemStrokeColor,
+        backgroundColor: this.state.currentItemBackgroundColor,
+        fillStyle: this.state.currentItemFillStyle,
+        strokeWidth: this.state.currentItemStrokeWidth,
+        strokeStyle: this.state.currentItemStrokeStyle,
+        roughness: this.state.currentItemRoughness,
+        opacity: this.state.currentItemOpacity,
+        fontSize: this.state.currentItemFontSize,
+        fontFamily: this.state.currentItemFontFamily,
+      },
+    });
+
+    if (!tableElements.length) {
+      return false;
+    }
+
+    this.addElementsFromPasteOrLibrary({
+      elements: tableElements,
+      files: null,
+      position,
+      retainSeed: true,
+    });
+
+    return true;
+  };
+
+  private insertTableFromText = (
+    text: string,
+    position: "cursor" | { clientX: number; clientY: number },
+  ) => {
+    const result = tryParseTabularData(text);
+    if (!result.ok) {
+      return false;
+    }
+
+    return this.insertTableFromRows(result.data.rows, position);
+  };
+
   // TODO: Cover with tests
   private async insertClipboardContent(
     data: ClipboardData,
@@ -3546,9 +3627,14 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    // ------------------- Spreadsheet -------------------
+    // ------------------- Tabular data / Spreadsheet -------------------
 
     if (!isPlainPaste && data.text) {
+      if (this.insertTableFromText(data.text, "cursor")) {
+        trackEvent("paste", "table", "tabular");
+        return;
+      }
+
       const result = tryParseSpreadsheet(data.text);
       if (result.ok) {
         this.setState({
@@ -11506,6 +11592,20 @@ class App extends React.Component<AppProps, AppState> {
           }
           // if EncodingError, fall through to insert as regular image
         }
+      }
+    }
+
+    const tabularFile = fileItems
+      .map((item) => item.file)
+      .find((file) => this.isTabularDataFile(file));
+    if (tabularFile) {
+      try {
+        if (this.insertTableFromText(await this.readFileAsText(tabularFile), event)) {
+          trackEvent("drop", "table", "file");
+          return;
+        }
+      } catch (error: any) {
+        console.error(error);
       }
     }
 
