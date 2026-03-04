@@ -8,6 +8,8 @@ import {
   tryParseSpreadsheet,
 } from "./charts.parse";
 import { renderRadarChart } from "./charts.radar";
+import { renderTable } from "./charts.table";
+import { tryParseCSVCells } from "./csv";
 
 import type { ChartElements, Spreadsheet } from "./charts.types";
 
@@ -20,6 +22,7 @@ export {
 
 export { isSpreadsheetValidForChartType } from "./charts.helpers";
 export { tryParseCells, tryParseNumber, tryParseSpreadsheet };
+export { tryParseCSVCells, renderTable };
 
 export const renderSpreadsheet = (
   chartType: ChartType,

@@ -560,6 +560,7 @@ const LayerUI = ({
         <PasteChartDialog
           data={appState.openDialog.data}
           rawText={appState.openDialog.rawText}
+          csvCells={appState.openDialog.csvCells}
           onClose={() =>
             setAppState({
               openDialog: null,
