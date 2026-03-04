@@ -427,6 +427,7 @@ import { EraserTrail } from "../eraser";
 import { getShortcutKey } from "../shortcut";
 
 import { tryParseSpreadsheet } from "../charts";
+import { parseTabularText, renderTableFromCells } from "../tables";
 
 import ConvertElementTypePopup, {
   getConversionTypeFromElements,
@@ -3516,6 +3517,92 @@ class App extends React.Component<AppProps, AppState> {
     }
   };
 
+  private isTabularFile = (file: File) => {
+    const normalizedName = (file.name || "").toLowerCase();
+    const normalizedType = (file.type || "").toLowerCase();
+    return (
+      normalizedName.endsWith(".csv") ||
+      normalizedName.endsWith(".tsv") ||
+      normalizedType === "text/csv" ||
+      normalizedType === "application/csv" ||
+      normalizedType === "text/tab-separated-values" ||
+      normalizedType === "application/vnd.ms-excel"
+    );
+  };
+
+  private insertTableFromText = (
+    text: string,
+    sceneX: number,
+    sceneY: number,
+  ) => {
+    const parsed = parseTabularText(text);
+    if (!parsed.ok) {
+      return false;
+    }
+    return this.insertTableFromCells(parsed.data, sceneX, sceneY);
+  };
+
+  private insertTableFromCells = (
+    cells: string[][],
+    sceneX: number,
+    sceneY: number,
+  ) => {
+    const topLayerFrame = this.getTopLayerFrameAtSceneCoords({
+      x: sceneX,
+      y: sceneY,
+    });
+    const tableElements = renderTableFromCells({
+      cells,
+      x: sceneX,
+      y: sceneY,
+      groupId: nanoid(),
+      frameId: topLayerFrame ? topLayerFrame.id : null,
+      style: {
+        strokeColor: this.state.currentItemStrokeColor,
+        backgroundColor: this.state.currentItemBackgroundColor,
+        fillStyle: this.state.currentItemFillStyle,
+        strokeWidth: this.state.currentItemStrokeWidth,
+        strokeStyle: this.state.currentItemStrokeStyle,
+        roughness: this.state.currentItemRoughness,
+        opacity: this.state.currentItemOpacity,
+        locked: false,
+      },
+      fontSize: this.state.currentItemFontSize,
+      fontFamily: this.state.currentItemFontFamily,
+    });
+
+    if (tableElements.length === 0) {
+      return false;
+    }
+
+    this.scene.insertElements([...tableElements]);
+    this.store.scheduleCapture();
+    this.setState({
+      selectedElementIds: makeNextSelectedElementIds(
+        Object.fromEntries(tableElements.map((element) => [element.id, true])),
+        this.state,
+      ),
+    });
+    return true;
+  };
+
+  private maybeInsertDroppedTabularFile = async (
+    file: File,
+    sceneX: number,
+    sceneY: number,
+  ) => {
+    if (!this.isTabularFile(file)) {
+      return false;
+    }
+    try {
+      const text = await file.text();
+      return this.insertTableFromText(text, sceneX, sceneY);
+    } catch (error: any) {
+      console.warn(`failed to parse dropped tabular file: ${error.message}`);
+    }
+    return false;
+  };
+
   // TODO: Cover with tests
   private async insertClipboardContent(
     data: ClipboardData,
@@ -3549,6 +3636,10 @@ class App extends React.Component<AppProps, AppState> {
     // ------------------- Spreadsheet -------------------
 
     if (!isPlainPaste && data.text) {
+      if (this.insertTableFromText(data.text, sceneX, sceneY)) {
+        return;
+      }
+
       const result = tryParseSpreadsheet(data.text);
       if (result.ok) {
         this.setState({
@@ -3932,6 +4023,10 @@ class App extends React.Component<AppProps, AppState> {
     } else {
       const textNodes = mixedContent.filter((node) => node.type === "text");
       if (textNodes.length) {
+        const textContent = textNodes.map((node) => node.value).join("\n");
+        if (!isPlainPaste && this.insertTableFromText(textContent, sceneX, sceneY)) {
+          return;
+        }
         this.addTextFromPaste(
           textNodes.map((node) => node.value).join("\n\n"),
           isPlainPaste,
@@ -11507,6 +11602,17 @@ class App extends React.Component<AppProps, AppState> {
           // if EncodingError, fall through to insert as regular image
         }
       }
+
+      if (file && this.isTabularFile(file)) {
+        const didInsertTable = await this.maybeInsertDroppedTabularFile(
+          file,
+          sceneX,
+          sceneY,
+        );
+        if (didInsertTable) {
+          return;
+        }
+      }
     }
 
     const imageFiles = fileItems
@@ -11570,8 +11676,11 @@ class App extends React.Component<AppProps, AppState> {
 
     const textItem = dataTransferList.findByType(MIME_TYPES.text);
 
-    if (textItem) {
+    if (textItem && fileItems.length === 0) {
       const text = textItem.value;
+      if (this.insertTableFromText(text, sceneX, sceneY)) {
+        return;
+      }
       if (
         text &&
         embeddableURLValidator(text, this.props.validateEmbeddable) &&

@@ -211,10 +211,27 @@ export const copyToClipboard = async (
 };
 
 /** internal, specific to parsing paste events. Do not reuse. */
+const serializeHTMLTable = (table: HTMLTableElement) => {
+  const rows = Array.from(table.rows)
+    .map((row) =>
+      Array.from(row.cells)
+        .map((cell) => cell.textContent?.trim() ?? "")
+        .join("\t"),
+    )
+    .filter((row) => row.trim().length > 0);
+
+  return rows.join("\n");
+};
+
 function parseHTMLTree(el: ChildNode) {
   let result: PastedMixedContent = [];
   for (const node of el.childNodes) {
-    if (node.nodeType === 3) {
+    if (node instanceof HTMLTableElement) {
+      const tableText = serializeHTMLTable(node);
+      if (tableText) {
+        result.push({ type: "text", value: tableText });
+      }
+    } else if (node.nodeType === 3) {
       const text = node.textContent?.trim();
       if (text) {
         result.push({ type: "text", value: text });
