@@ -426,7 +426,7 @@ import { EraserTrail } from "../eraser";
 
 import { getShortcutKey } from "../shortcut";
 
-import { tryParseSpreadsheet } from "../charts";
+import { tryParseSpreadsheet, tryParseCSVCells, renderTable } from "../charts";
 
 import ConvertElementTypePopup, {
   getConversionTypeFromElements,
@@ -3546,16 +3546,19 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    // ------------------- Spreadsheet -------------------
+    // ------------------- Spreadsheet / Table -------------------
 
     if (!isPlainPaste && data.text) {
       const result = tryParseSpreadsheet(data.text);
-      if (result.ok) {
+      const csvCells = tryParseCSVCells(data.text);
+
+      if (result.ok || csvCells) {
         this.setState({
           openDialog: {
             name: "charts",
-            data: result.data,
+            data: result.ok ? result.data : null,
             rawText: data.text,
+            csvCells,
           },
         });
         return;
@@ -11516,6 +11519,36 @@ class App extends React.Component<AppProps, AppState> {
     if (imageFiles.length > 0 && this.isToolSupported("image")) {
       return this.insertImages(imageFiles, sceneX, sceneY);
     }
+
+    // ------------------- CSV files → Table -------------------
+    const csvFiles = fileItems
+      .map((data) => data.file)
+      .filter(
+        (file) =>
+          file.type === "text/csv" || file.name?.toLowerCase().endsWith(".csv"),
+      );
+
+    if (csvFiles.length > 0) {
+      try {
+        const csvText = await csvFiles[0].text();
+        const csvCells = tryParseCSVCells(csvText);
+        if (csvCells) {
+          const tableElements = renderTable(csvCells, sceneX, sceneY);
+          if (tableElements) {
+            this.addElementsFromPasteOrLibrary({
+              elements: tableElements,
+              position: event,
+              files: null,
+            });
+            return;
+          }
+        }
+      } catch (error: any) {
+        this.setState({ errorMessage: error.message });
+      }
+      return;
+    }
+
     const excalidrawLibrary_ids = dataTransferList.getData(
       MIME_TYPES.excalidrawlibIds,
     );

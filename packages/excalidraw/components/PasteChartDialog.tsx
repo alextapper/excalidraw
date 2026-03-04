@@ -5,7 +5,11 @@ import { newTextElement } from "@excalidraw/element";
 import type { ChartType } from "@excalidraw/element/types";
 
 import { trackEvent } from "../analytics";
-import { isSpreadsheetValidForChartType, renderSpreadsheet } from "../charts";
+import {
+  isSpreadsheetValidForChartType,
+  renderSpreadsheet,
+  renderTable,
+} from "../charts";
 import { t } from "../i18n";
 import { exportToSvg } from "../scene/export";
 
@@ -113,6 +117,71 @@ const ChartPreviewBtn = (props: {
   );
 };
 
+const TablePreviewBtn = (props: {
+  csvCells: string[][];
+  onClick: (elements: ChartElements) => void;
+}) => {
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const [tableElements, setTableElements] = useState<ChartElements | null>(
+    null,
+  );
+  const { theme } = useUIAppState();
+
+  useLayoutEffect(() => {
+    if (!props.csvCells || props.csvCells.length < 2) {
+      setTableElements(null);
+      return;
+    }
+
+    const elements = renderTable(props.csvCells, 0, 0);
+    if (!elements) {
+      setTableElements(null);
+      previewRef.current?.replaceChildren();
+      return;
+    }
+    setTableElements(elements);
+    const previewNode = previewRef.current!;
+
+    (async () => {
+      const svg = await exportToSvg(
+        elements,
+        {
+          exportBackground: false,
+          viewBackgroundColor: "#fff",
+          exportWithDarkMode: theme === "dark",
+        },
+        null,
+        {
+          skipInliningFonts: true,
+        },
+      );
+      svg.querySelector(".style-fonts")?.remove();
+      previewNode.replaceChildren();
+      previewNode.appendChild(svg);
+    })();
+
+    return () => {
+      previewNode.replaceChildren();
+    };
+  }, [props.csvCells, theme]);
+
+  return (
+    <button
+      type="button"
+      className="ChartPreview"
+      aria-label={t("labels.chartType_table")}
+      onClick={() => {
+        if (tableElements) {
+          props.onClick(tableElements);
+        }
+      }}
+    >
+      <div className="ChartPreview__canvas" ref={previewRef} />
+      <div className="ChartPreview__label">{t("labels.chartType_table")}</div>
+    </button>
+  );
+};
+
 const PlainTextPreviewBtn = (props: {
   rawText: string;
   onClick: OnPlainTextPaste;
@@ -176,10 +245,12 @@ const PlainTextPreviewBtn = (props: {
 export const PasteChartDialog = ({
   data,
   rawText,
+  csvCells,
   onClose,
 }: {
-  data: Spreadsheet;
+  data: Spreadsheet | null;
   rawText: string;
+  csvCells?: string[][] | null;
   onClose: () => void;
 }) => {
   const { onInsertElements, focusContainer } = useApp();
@@ -202,6 +273,13 @@ export const PasteChartDialog = ({
     focusContainer();
   };
 
+  const handleTableClick = (elements: ChartElements) => {
+    onInsertElements(elements);
+    trackEvent("paste", "chart", "table");
+    onClose();
+    focusContainer();
+  };
+
   const handlePlainTextClick = (rawText: string) => {
     const textElement = newTextElement({
       text: rawText,
@@ -214,50 +292,60 @@ export const PasteChartDialog = ({
     focusContainer();
   };
 
+  const hasChartData = data !== null;
+  const hasTableData = csvCells && csvCells.length >= 2;
+  const dialogTitle = hasChartData
+    ? t("labels.pasteCharts")
+    : t("labels.pasteChartsOrTable");
+
   return (
     <Dialog
       size="regular"
       onCloseRequest={handleClose}
       title={
         <div className="PasteChartDialog__title">
-          <div className="PasteChartDialog__titleText">
-            {t("labels.pasteCharts")}
-          </div>
-          <div
-            className="PasteChartDialog__reshuffleBtn"
-            onClick={handleReshuffleColors}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                handleReshuffleColors();
-              }
-            }}
-          >
-            {bucketFillIcon}
-          </div>
+          <div className="PasteChartDialog__titleText">{dialogTitle}</div>
+          {hasChartData && (
+            <div
+              className="PasteChartDialog__reshuffleBtn"
+              onClick={handleReshuffleColors}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleReshuffleColors();
+                }
+              }}
+            >
+              {bucketFillIcon}
+            </div>
+          )}
         </div>
       }
       className={"PasteChartDialog"}
       autofocus={false}
     >
       <div className={"container"}>
-        {(["bar", "line", "radar"] as const).map((chartType) => {
-          if (!isSpreadsheetValidForChartType(data, chartType)) {
-            return null;
-          }
+        {hasChartData &&
+          (["bar", "line", "radar"] as const).map((chartType) => {
+            if (!isSpreadsheetValidForChartType(data, chartType)) {
+              return null;
+            }
 
-          return (
-            <ChartPreviewBtn
-              key={chartType}
-              chartType={chartType}
-              spreadsheet={data}
-              colorSeed={colorSeed}
-              onClick={handleChartClick}
-            />
-          );
-        })}
+            return (
+              <ChartPreviewBtn
+                key={chartType}
+                chartType={chartType}
+                spreadsheet={data}
+                colorSeed={colorSeed}
+                onClick={handleChartClick}
+              />
+            );
+          })}
+        {hasTableData && (
+          <TablePreviewBtn csvCells={csvCells} onClick={handleTableClick} />
+        )}
         {rawText && (
           <PlainTextPreviewBtn
             rawText={rawText}
