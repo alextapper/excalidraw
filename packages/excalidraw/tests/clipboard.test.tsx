@@ -192,6 +192,40 @@ describe("paste text as single lines", () => {
   });
 });
 
+describe("paste tabular text", () => {
+  it("should create a table from CSV text with regular paste", async () => {
+    const text = "id,first_name,last_name\n1,Alice,Awtood\n2,Bob,Billby";
+    pasteWithCtrlCmdV(text);
+
+    await waitFor(() => {
+      const rectangles = h.elements.filter((element) => element.type === "rectangle");
+      const tableText = h.elements.filter((element) => element.type === "text");
+      expect(rectangles).toHaveLength(9);
+      expect(tableText).toHaveLength(9);
+      expect(
+        tableText.some(
+          (element) => element.type === "text" && element.originalText === "Alice",
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("should preserve plain paste behavior for CSV text", async () => {
+    const text = "id,first_name,last_name\n1,Alice,Awtood\n2,Bob,Billby";
+    pasteWithCtrlCmdShiftV(text);
+
+    await waitFor(() => {
+      expect(h.elements).toHaveLength(1);
+      const firstElement = h.elements[0];
+      expect(firstElement.type).toBe("text");
+      if (firstElement.type !== "text") {
+        throw new Error("expected pasted element to be text");
+      }
+      expect(firstElement.originalText).toBe(text);
+    });
+  });
+});
+
 describe("paste text as a single element", () => {
   it("should create single text element when copying text with Ctrl/Cmd+Shift+V", async () => {
     const text = "sajgfakfn\naaksfnknas\nakefnkasf";
