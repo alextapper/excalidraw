@@ -102,5 +102,32 @@
         min-height: 200px;
       }
     }
+    .ChartPreview__table-preview,
+    .ChartPreview__plaintext-preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      padding: 0.5rem;
+      overflow: hidden;
+    }
+    .ChartPreview__table-preview {
+      table {
+        border-collapse: collapse;
+        font-size: 0.7rem;
+      }
+      td {
+        border: 1px solid $color-gray-4;
+        padding: 2px 4px;
+        max-width: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+    .ChartPreview__plaintext-preview {
+      white-space: pre-wrap;
+      word-break: break-word;
+      text-align: left;
+    }
   }
 }

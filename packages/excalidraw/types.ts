@@ -392,7 +392,13 @@ export interface AppState {
     | { name: "commandPalette" }
     | { name: "settings" }
     | { name: "elementLinkSelector"; sourceElementId: ExcalidrawElement["id"] }
-    | { name: "charts"; data: Spreadsheet; rawText: string };
+    | {
+        name: "charts";
+        data: Spreadsheet;
+        rawText: string;
+        tableCells?: string[][];
+      }
+    | { name: "table"; cells: string[][]; rawText: string };
   /**
    * Reflects user preference for whether the default sidebar should be docked.
    *
@@ -749,6 +755,7 @@ export type AppClassProperties = {
   setActiveTool: App["setActiveTool"];
   setOpenDialog: App["setOpenDialog"];
   insertEmbeddableElement: App["insertEmbeddableElement"];
+  insertTableElement: App["insertTableElement"];
   onMagicframeToolSelect: App["onMagicframeToolSelect"];
   getName: App["getName"];
   dismissLinearEditor: App["dismissLinearEditor"];

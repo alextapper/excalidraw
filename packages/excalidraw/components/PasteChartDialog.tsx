@@ -176,13 +176,15 @@ const PlainTextPreviewBtn = (props: {
 export const PasteChartDialog = ({
   data,
   rawText,
+  tableCells,
   onClose,
 }: {
   data: Spreadsheet;
   rawText: string;
+  tableCells?: string[][];
   onClose: () => void;
 }) => {
-  const { onInsertElements, focusContainer } = useApp();
+  const { onInsertElements, insertTableElement, focusContainer } = useApp();
   const [colorSeed, setColorSeed] = useState(Math.random());
 
   const handleReshuffleColors = React.useCallback(() => {
@@ -212,6 +214,15 @@ export const PasteChartDialog = ({
     trackEvent("paste", "chart", "plaintext");
     onClose();
     focusContainer();
+  };
+
+  const handleTableClick = () => {
+    if (tableCells && tableCells.length > 0) {
+      insertTableElement({ cells: tableCells });
+      trackEvent("paste", "chart", "table");
+      onClose();
+      focusContainer();
+    }
   };
 
   return (
@@ -258,6 +269,31 @@ export const PasteChartDialog = ({
             />
           );
         })}
+        {tableCells && tableCells.length > 0 && (
+          <button
+            type="button"
+            className="ChartPreview"
+            aria-label={t("labels.chartType_table")}
+            onClick={handleTableClick}
+          >
+            <div className="ChartPreview__canvas ChartPreview__table-preview">
+              <table>
+                <tbody>
+                  {tableCells.slice(0, 4).map((row, i) => (
+                    <tr key={i}>
+                      {row.slice(0, 3).map((cell, j) => (
+                        <td key={j}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="ChartPreview__label">
+              {t("labels.chartType_table")}
+            </div>
+          </button>
+        )}
         {rawText && (
           <PlainTextPreviewBtn
             rawText={rawText}

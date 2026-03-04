@@ -427,6 +427,7 @@ import { EraserTrail } from "../eraser";
 import { getShortcutKey } from "../shortcut";
 
 import { tryParseSpreadsheet } from "../charts";
+import { parseTableData, createTableHtml, getTableDimensions } from "../table";
 
 import ConvertElementTypePopup, {
   getConversionTypeFromElements,
@@ -1637,6 +1638,19 @@ class App extends React.Component<AppProps, AppState> {
                 },
               } as const;
             }
+          } else if (
+            isEmbeddableElement(el) &&
+            el.customData?.tableData &&
+            Array.isArray(el.customData.tableData)
+          ) {
+            const cells = el.customData.tableData as string[][];
+            src = {
+              intrinsicSize: { w: el.width, h: el.height },
+              type: "document",
+              srcdoc: () =>
+                createTableHtml(cells, this.state.theme as "light" | "dark"),
+              sandbox: { allowSameOrigin: true },
+            } as const;
           } else {
             src = getEmbedLink(toValidURL(el.link || ""));
           }
@@ -3546,15 +3560,37 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    // ------------------- Spreadsheet -------------------
+    // ------------------- Spreadsheet / Table -------------------
 
     if (!isPlainPaste && data.text) {
-      const result = tryParseSpreadsheet(data.text);
-      if (result.ok) {
+      const tableCells = parseTableData(data.text);
+      const chartResult = tryParseSpreadsheet(data.text);
+
+      if (tableCells && tableCells.length > 0) {
+        if (chartResult.ok) {
+          this.setState({
+            openDialog: {
+              name: "charts",
+              data: chartResult.data,
+              rawText: data.text,
+              tableCells,
+            },
+          });
+        } else {
+          this.setState({
+            openDialog: {
+              name: "table",
+              cells: tableCells,
+              rawText: data.text,
+            },
+          });
+        }
+        return;
+      } else if (chartResult.ok) {
         this.setState({
           openDialog: {
             name: "charts",
-            data: result.data,
+            data: chartResult.data,
             rawText: data.text,
           },
         });
@@ -8552,6 +8588,61 @@ class App extends React.Component<AppProps, AppState> {
     return element;
   };
 
+  public insertTableElement = ({
+    sceneX,
+    sceneY,
+    cells,
+  }: {
+    sceneX?: number;
+    sceneY?: number;
+    cells: string[][];
+  }) => {
+    const { x: cursorX, y: cursorY } = viewportCoordsToSceneCoords(
+      {
+        clientX: this.lastViewportPosition.x,
+        clientY: this.lastViewportPosition.y,
+      },
+      this.state,
+    );
+    const x = sceneX ?? cursorX;
+    const y = sceneY ?? cursorY;
+    const [gridX, gridY] = getGridPoint(
+      x,
+      y,
+      this.lastPointerDownEvent?.[KEYS.CTRL_OR_CMD]
+        ? null
+        : this.getEffectiveGridSize(),
+    );
+
+    const { width, height } = getTableDimensions(
+      cells.length,
+      cells[0]?.length ?? 0,
+    );
+
+    const element = newEmbeddableElement({
+      type: "embeddable",
+      x: gridX,
+      y: gridY,
+      strokeColor: this.state.currentItemStrokeColor,
+      backgroundColor: this.state.currentItemBackgroundColor,
+      fillStyle: this.state.currentItemFillStyle,
+      strokeWidth: this.state.currentItemStrokeWidth,
+      strokeStyle: this.state.currentItemStrokeStyle,
+      roughness: this.state.currentItemRoughness,
+      roundness: this.getCurrentItemRoundness("embeddable"),
+      opacity: this.state.currentItemOpacity,
+      locked: false,
+      width,
+      height,
+      link: "excalidraw-table:",
+      customData: { tableData: cells },
+    });
+
+    this.scene.insertElement(element);
+
+    return element;
+  };
+
   //create rectangle element with youtube top left on nearest grid point width / hight 640/360
   public insertEmbeddableElement = ({
     sceneX,
@@ -11563,6 +11654,32 @@ class App extends React.Component<AppProps, AppState> {
     if (fileItems.length > 0) {
       const { file, fileHandle } = fileItems[0];
       if (file) {
+        const isCsvFile =
+          file.name?.toLowerCase().endsWith(".csv") ||
+          file.type === "text/csv" ||
+          file.type === "application/csv";
+        if (isCsvFile) {
+          try {
+            const text = await file.text();
+            const cells = parseTableData(text);
+            if (cells && cells.length > 0) {
+              const tableElement = this.insertTableElement({
+                sceneX,
+                sceneY,
+                cells,
+              });
+              if (tableElement) {
+                this.store.scheduleCapture();
+                this.setState({
+                  selectedElementIds: { [tableElement.id]: true },
+                });
+              }
+              return;
+            }
+          } catch (error: any) {
+            console.warn("Failed to parse CSV file:", error);
+          }
+        }
         // Attempt to parse an excalidraw/excalidrawlib file
         await this.loadFileToCanvas(file, fileHandle);
       }
